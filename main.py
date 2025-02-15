@@ -3,6 +3,8 @@ import urllib.request
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 from concurrent.futures import ThreadPoolExecutor
+import logging
+import time
 
 class GoalKickerParser(HTMLParser):
     def __init__(self):
@@ -24,25 +26,36 @@ class GoalKickerParser(HTMLParser):
         if tag == 'div' and self.in_div:
             self.in_div = False
 
-def fetch(url):
-    try:
-        with urllib.request.urlopen(url) as response:
-            return response.read().decode('utf-8')
-    except Exception as e:
-        print(f"Error fetching {url}: {e}")
-        return ''
+def fetch(url, retries=3):
+    attempt = 0
+    while attempt < retries:
+        try:
+            with urllib.request.urlopen(url) as response:
+                return response.read().decode('utf-8')
+        except Exception as e:
+            logging.error(f"Error fetching {url}: {e}")
+            attempt += 1
+            time.sleep(2)
+    return ''
+
+def sanitize_filename(url):
+    # Extract the filename from the URL
+    filename = os.path.basename(urlparse(url).path)
+    # Remove any directory traversal characters
+    return os.path.basename(filename)
 
 def download_pdf(pdf_url):
-    filename = os.path.basename(urlparse(pdf_url).path)
+    filename = sanitize_filename(pdf_url)
     try:
         with urllib.request.urlopen(pdf_url) as response:
             with open(filename, 'wb') as f:
                 f.write(response.read())
-        print(f"Downloaded: {filename}")
+        logging.info(f"Downloaded: {filename}")
     except Exception as e:
-        print(f"Error downloading {pdf_url}: {e}")
+        logging.error(f"Error downloading {pdf_url}: {e}")
 
 def main():
+    logging.basicConfig(level=logging.INFO)
     base_url = 'http://books.goalkicker.com/'
     homepage_html = fetch(base_url)
     if not homepage_html:
